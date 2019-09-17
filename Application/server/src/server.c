@@ -211,7 +211,7 @@ extern void run_server(void)
             }
             else if(0 < ret_val)
             {
-                if(true == FD_ISSET(client_sock, &read_fds))
+                if(true == FD_ISSET(g_server_sock, &read_fds))
                 {
                     client_sock = accept(g_server_sock, NULL, NULL);
 

@@ -6,12 +6,14 @@ C_OBJ_FILES=
 
 ##############################################
 #CFLAGS+=`pkg-config --cflags --libs glib-2.0`
-#CFLAGS+=-pthread
-#CFLAGS+=-lpthread
-CFLAGS+=-I ../inc/
-CFLAGS+=-I ../../tls/inc/
+CFLAGS+=-lssl
+CFLAGS+=-lcrypto
+CFLAGS+=-pthread
+CFLAGS+=-lpthread
 CFLAGS+=-Wall
 CFLAGS+=-g
+CFLAGS+=-w
+CFLAGS+=-I ../inc/
 
 ##############################################
 BIN+=../bin/client

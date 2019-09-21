@@ -34,7 +34,6 @@
 
 #define RUNNING 1
 #define STOPPED 0
-#define SELECT_TIMEOUT_SEC 5
 
 /**********************************************************************************
  * LOCAL GLOBAL VARIABLES
@@ -188,6 +187,7 @@ extern void run_server(void)
     int client_sock = -1;
     fd_set read_fds = {0};
     struct timeval timeout = {0};
+    const int SELECT_TIMEOUT_SEC = 5;
 
     if(-1 == g_server_sock)
     {
@@ -257,10 +257,6 @@ extern int deinit_server(void)
         {
             printf("Error at close(): %s\n", strerror(errno));
         }
-        else
-        {
-            g_server_sock = -1;
-        }
 
         ret_val = deinit_server_tls();
 
@@ -268,6 +264,8 @@ extern int deinit_server(void)
         {
             printf("Error at deinit_server_tls()\n");
         }
+
+        g_server_sock = -1;
     }
 
     return ret_val;
@@ -278,7 +276,7 @@ extern int deinit_server(void)
 **********************************************************************************/
 
 /**
- * @brief  Register Server entity to UNIX signals
+ * @brief  Register to UNIX signals
  *
  * @return 0 on success, -1 on failure
  */
@@ -420,9 +418,9 @@ static void *client_handler_thread_func(const void *arg)
     int client_sock = *((int *) arg);
     int ret_val = -1;
     int client_status = STOPPED;
-    fd_set read_fds = {0};
-    struct timeval timeout = {0};
     SSL *client_ssl_struct = NULL;
+    const int RECV_STR_CAPACITY = 256;
+    char recv_str[RECV_STR_CAPACITY];
 
     ret_val = perform_tls_handshake(client_sock, &client_ssl_struct);
 
@@ -433,25 +431,29 @@ static void *client_handler_thread_func(const void *arg)
 
     while((RUNNING == client_status) && (RUNNING == g_server_status))
     {
-        FD_ZERO(&read_fds);
-        FD_SET(client_sock, &read_fds);
+        memset(recv_str, 0, RECV_STR_CAPACITY);
 
-        timeout.tv_sec = SELECT_TIMEOUT_SEC;
-        timeout.tv_usec = 0;
+        ret_val = SSL_read(client_ssl_struct, recv_str, RECV_STR_CAPACITY);
 
-        ret_val = select((client_sock + 1), &read_fds, NULL, NULL, &timeout);
-
-        if(-1 == ret_val)
+        if(0 < ret_val)
         {
-            printf("Error at select(): %s\n", strerror(errno));
-        }
-        else if(0 < ret_val)
-        {
-            if(true == FD_ISSET(client_sock, &read_fds))
+            printf("Recv from client: %s\n", recv_str);
+
+            ret_val = SSL_write(client_ssl_struct, "Server Hello", sizeof("Server Hello"));
+
+            if(0 >= ret_val)
             {
-                /* Handle client request */
+                printf("Error when send to client: %d\n", ret_val);
+                client_status = STOPPED;
             }
         }
+        else if(0 >= ret_val)
+        {
+            printf("Error when recv from client: %d\n", ret_val);
+            client_status = STOPPED;
+        }
+
+        sleep(1);
     }
 
     ret_val = deinit_client(client_sock);
@@ -463,6 +465,7 @@ static void *client_handler_thread_func(const void *arg)
 
     if(NULL != client_ssl_struct)
     {
+        SSL_shutdown(client_ssl_struct);
         SSL_free(client_ssl_struct);
     }
 
@@ -620,6 +623,15 @@ static int perform_tls_handshake(const int client_sock, SSL **client_ssl_struct)
         if(1 != ret_val)
         {
             printf("Error at SSL_accept()\n");
+            ERR_print_errors_fp(stderr);
+            break;
+        }
+
+        ret_val = SSL_do_handshake(temp_client_ssl_struct);
+
+        if(1 != ret_val)
+        {
+            printf("Error at SSL_do_handshake()\n");
             ERR_print_errors_fp(stderr);
             break;
         }
